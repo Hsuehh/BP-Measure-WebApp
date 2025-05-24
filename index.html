@@ -4,15 +4,33 @@
   <meta charset="utf-8">
   <title>LINE LIFF 血壓測試</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; text-align: center; padding: 20px; }
+    video { border: 1px solid #ccc; margin: 10px 0; }
+    .result { margin-top: 20px; font-size: 18px; color: #333; }
+    .error { color: red; }
+  </style>
 </head>
 <body>
   <h1>血壓測試 LIFF WebApp</h1>
   <button onclick="getProfile()">取得 LINE 使用者資料</button>
   <pre id="output"></pre>
+  <hr>
+  <h2>血壓監測</h2>
+  <video id="video" width="320" height="240" autoplay></video>
+  <label for="gender">性別 (0: 男, 1: 女): <input type="number" id="gender" min="0" max="1" value="0"></label><br>
+  <label for="age">年齡: <input type="number" id="age" min="0" max="120" value="30"></label><br>
+  <button onclick="startRecording()">開始錄影</button>
+  <button onclick="stopRecording()" disabled>停止錄影</button>
+  <div id="result" class="result"></div>
 
   <script>
+    let mediaRecorder;
+    let recordedBlobs = [];
+    let stopButton = document.querySelector('button:nth-of-type(2)');
+
     async function main() {
-      await liff.init({ liffId: "2007471936" });  // ⚠️ 貼上 LIFF ID
+      await liff.init({ liffId: "2007471936" }); // 使用你提供的 LIFF ID
       if (!liff.isLoggedIn()) {
         liff.login();
       }
@@ -23,6 +41,65 @@
       document.getElementById("output").textContent = JSON.stringify(profile, null, 2);
     }
 
+    async function initCamera() {
+      try {
+        const stream = await navigator.mediaDevices.getUserMedia({ video: true });
+        document.getElementById('video').srcObject = stream;
+        mediaRecorder = new MediaRecorder(stream);
+        mediaRecorder.ondataavailable = (event) => {
+          if (event.data.size > 0) recordedBlobs.push(event.data);
+        };
+        mediaRecorder.onstop = uploadVideo;
+      } catch (error) {
+        document.getElementById('result').innerHTML = `<span class="error">錯誤：無法存取攝像頭 (${error.message})</span>`;
+      }
+    }
+
+    function startRecording() {
+      recordedBlobs = [];
+      mediaRecorder.start();
+      document.getElementById('result').innerHTML = "錄影中...";
+      stopButton.disabled = false;
+      document.querySelector('button:nth-of-type(1)').disabled = true;
+    }
+
+    function stopRecording() {
+      mediaRecorder.stop();
+      document.querySelector('button:nth-of-type(1)').disabled = false;
+      stopButton.disabled = true;
+    }
+
+    async function uploadVideo() {
+      const blob = new Blob(recordedBlobs, { type: 'video/mp4' });
+      const formData = new FormData();
+      formData.append('video', blob);
+      formData.append('user_id', liff.getContext().userId);
+      formData.append('gender', document.getElementById('gender').value);
+      formData.append('age', document.getElementById('age').value);
+
+      const resultDiv = document.getElementById('result');
+      resultDiv.innerHTML = "上傳中...";
+
+      try {
+        const response = await fetch('https://your-fastapi-server.com/upload_video', {
+          method: 'POST',
+          body: formData
+        });
+
+        const data = await response.json();
+        if (data.error) {
+          resultDiv.innerHTML = `<span class="error">錯誤：${data.error}</span>`;
+        } else {
+          const status = data.SBP < 130 && data.DBP < 85 ? "正常" : "偏高，請注意！";
+          resultDiv.innerHTML = `收縮壓 (SBP)：${data.SBP} mmHg<br>舒張壓 (DBP)：${data.DBP} mmHg<br>時間：${data.timestamp}<br>狀態：${status}`;
+        }
+      } catch (error) {
+        resultDiv.innerHTML = `<span class="error">錯誤：${error.message}</span>`;
+      }
+    }
+
+    // 初始化攝像頭和 LIFF
+    initCamera();
     main();
   </script>
 </body>
