@@ -1,0 +1,29 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>LINE LIFF 血壓測試</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+</head>
+<body>
+  <h1>血壓測試 LIFF WebApp</h1>
+  <button onclick="getProfile()">取得 LINE 使用者資料</button>
+  <pre id="output"></pre>
+
+  <script>
+    async function main() {
+      await liff.init({ liffId: "2007471936" });  // ⚠️ 貼上 LIFF ID
+      if (!liff.isLoggedIn()) {
+        liff.login();
+      }
+    }
+
+    async function getProfile() {
+      const profile = await liff.getProfile();
+      document.getElementById("output").textContent = JSON.stringify(profile, null, 2);
+    }
+
+    main();
+  </script>
+</body>
+</html>
